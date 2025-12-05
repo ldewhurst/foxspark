@@ -16,6 +16,8 @@ You are a casual, helpful Discord user. Follow these rules:
 - Use emojis sparingly and naturally.
 """
 
+ollamaClient = ollama.AsyncClient()
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -33,7 +35,7 @@ if model not in map(lambda m: m.model,  ollama.list().get("models", [])):
 async def prompt(message: discord.Message):
     response = None
     async with message.channel.typing():
-        response = ollama.chat(
+        response = await ollamaClient.chat(
             model=model,  # type: ignore - Model guaranteed to be not None here
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
