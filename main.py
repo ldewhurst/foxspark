@@ -67,7 +67,12 @@ async def discord_mod(ollama_client: ollama.AsyncClient, model: str, message: di
         
     mod_action = await ollama_mod(ollama_client, model, history, f"{message.author}: {message.content}")
     
-    print(f"Mod action: {mod_action}")
+    print(f"Discord Mod action: {mod_action}")
+
+async def twitch_mod(ollama_client: ollama.AsyncClient, model: str, history: list[str], message: str):
+    mod_action = await ollama_mod(ollama_client, model, history, message)
+    
+    print(f"Twitch Mod action: {mod_action}")
 
 # Run Discord client to moderate the Discord server.
 async def run_discord_client(ollama_client: ollama.AsyncClient, model: str):
@@ -104,12 +109,18 @@ async def run_twitch_client(ollama_client: ollama.AsyncClient, model: str):
     token, refresh_token = await auth.authenticate() # type: ignore
     await twitch.set_user_authentication(token, user_scope, refresh_token)
     
+    message_history = []
+    
     async def on_ready(ready_event: EventData):
         await ready_event.chat.join_room(target_channel)
         print("Twitch: Connected to Twitch chat")
         
     async def on_message(message: ChatMessage):
         print(f'in {message.room.name}, {message.user.name} said: {message.text}') # type: ignore
+        
+        await twitch_mod(ollama_client, model, message_history, f"{message.user.name}: {message.text}")
+        
+        message_history.append(f"{message.user.name}: {message.text}")
         
     chat = await Chat(twitch)
     
