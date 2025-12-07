@@ -2,10 +2,12 @@ from os import getenv
 from dotenv import load_dotenv
 from discord.ext import commands
 from dataclasses import dataclass
+from twitchAPI.twitch import Twitch
 import ollama
 import discord
 import logging
 import json
+import asyncio
 
 # Define a dataclass to hold moderation actions.
 @dataclass
@@ -54,7 +56,7 @@ async def ollama_mod(ollama_client: ollama.AsyncClient, model: str, history: lis
     )
     
 # Function to moderate a Discord message.
-async def discord_mod(model: str, message: discord.Message):
+async def discord_mod(ollama_client: ollama.AsyncClient, model: str, message: discord.Message):
     # Just pulling message history from the API for this version. Caching might be a good idea in future to improve response time.
     history = []
     async for history_message in message.channel.history(limit=10):
@@ -65,18 +67,13 @@ async def discord_mod(model: str, message: discord.Message):
     print(f"Mod action: {mod_action}")
 
 # Run Discord client to moderate the Discord server.
-def run_discord_client(ollama_client: ollama.AsyncClient):
+async def run_discord_client(ollama_client: ollama.AsyncClient, model: str):
     command_prefix = "!"
     
     intents = discord.Intents.default()
     intents.message_content = True # Must also be set in the developer portal
     
     token = getenv_required("DISCORD_TOKEN")
-    model = getenv_required("DISCORD_MODEL")
-    
-    # Check that the model is running
-    if model not in map(lambda models: models.model, ollama.list().get("models", [])):
-        raise ValueError(f"{model} not found in Ollama models")
     
     bot = commands.Bot(command_prefix, intents=intents)
     
@@ -88,11 +85,39 @@ def run_discord_client(ollama_client: ollama.AsyncClient):
     async def on_message(message: discord.Message):
         if message.author == bot.user:
             return # Ignore messages from self
-        await discord_mod(model, message)
+        await discord_mod(ollama_client, model, message)
         
-    bot.run(token)
+    await bot.start(token)
+    
+# Run Twitch client to moderate Twitch chat.
+async def run_twitch_client(ollama_client: ollama.AsyncClient, model: str):
+    client_id = getenv_required("TWITCH_CLIENT_ID")
+    client_secret = getenv_required("TWITCH_CLIENT_SECRET")
+    
+    twitch = Twitch(client_id, client_secret)
+    await twitch.authenticate_app([])
+    
+    async def on_ready():
+        print("Twitch: Connected to Twitch chat")
+        
+    print("Twitch: Client is not yet implemented.")
 
-logging.basicConfig()
-load_dotenv()
-ollama_client = ollama.AsyncClient()
-run_discord_client(ollama_client)
+async def main():
+    # Setup logging and load environment variables
+    logging.basicConfig()
+    load_dotenv()
+    
+    # Initialize Ollama client
+    ollama_client = ollama.AsyncClient()
+    model = getenv_required("DISCORD_MODEL")
+    
+    # Check that the model is running
+    if model not in map(lambda models: models.model, ollama.list().get("models", [])):
+        raise ValueError(f"{model} not found in Ollama models")
+    
+    # Run Discord and Twitch clients concurrently
+    asyncio.create_task(run_discord_client(ollama_client, model))
+    asyncio.create_task(run_twitch_client(ollama_client, model))
+    await asyncio.Future()
+    
+asyncio.run(main())
