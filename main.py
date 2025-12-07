@@ -3,6 +3,9 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from dataclasses import dataclass
 from twitchAPI.twitch import Twitch
+from twitchAPI.chat import Chat, EventData, ChatMessage
+from twitchAPI.oauth import UserAuthenticator
+from twitchAPI.type import AuthScope, ChatEvent
 import ollama
 import discord
 import logging
@@ -93,15 +96,28 @@ async def run_discord_client(ollama_client: ollama.AsyncClient, model: str):
 async def run_twitch_client(ollama_client: ollama.AsyncClient, model: str):
     client_id = getenv_required("TWITCH_CLIENT_ID")
     client_secret = getenv_required("TWITCH_CLIENT_SECRET")
+    user_scope = [AuthScope.CHAT_READ]
+    target_channel = "matrixoverclocker"
     
     twitch = Twitch(client_id, client_secret)
-    await twitch.authenticate_app([])
+    auth = UserAuthenticator(twitch, user_scope)
+    token, refresh_token = await auth.authenticate() # type: ignore
+    await twitch.set_user_authentication(token, user_scope, refresh_token)
     
-    async def on_ready():
+    async def on_ready(ready_event: EventData):
+        await ready_event.chat.join_room(target_channel)
         print("Twitch: Connected to Twitch chat")
         
-    print("Twitch: Client is not yet implemented.")
-
+    async def on_message(message: ChatMessage):
+        print(f'in {message.room.name}, {message.user.name} said: {message.text}') # type: ignore
+        
+    chat = await Chat(twitch)
+    
+    chat.register_event(ChatEvent.READY, on_ready)
+    chat.register_event(ChatEvent.MESSAGE, on_message)
+    
+    chat.start()
+        
 async def main():
     # Setup logging and load environment variables
     logging.basicConfig()
