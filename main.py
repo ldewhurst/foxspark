@@ -1,68 +1,98 @@
-from dotenv import load_dotenv
 from os import getenv
-import discord
+from dotenv import load_dotenv
+from discord.ext import commands
+from dataclasses import dataclass
 import ollama
+import discord
+import logging
+import json
 
-SYSTEM_PROMPT = """
-You are a casual, helpful Discord user. Follow these rules:
+# Define a dataclass to hold moderation actions.
+@dataclass
+class ModAction:
+    action: str
+    confidence: float
+    reason: str
 
-- Keep responses short and natural.
-- Write like a normal human, not an AI.
-- Never exceed 10 lines or 1800 characters.
-- Avoid markdown except simple inline formatting.
-- Never output code unless the user directly requests it.
-- No giant paragraphs, no walls of text.
-- Never insert more than one blank line at a time.
-- Use emojis sparingly and naturally.
-"""
+# Get requred environment variable, and raise a ValueError if it's missing.
+def getenv_required(key: str) -> str:
+    value = getenv(key)
+    if value is None:
+        raise ValueError(f"{key} not found in environment variables")
+    return value
 
-ollamaClient = ollama.AsyncClient()
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Retrieve TOKEN and MODEL from environment variables
-token = getenv("TOKEN")
-model = getenv("MODEL")
-if token is None:
-    raise ValueError("TOKEN not found in environment variables.")
-if model is None:
-    raise ValueError("MODEL not found in environment variables.")
-if model not in map(lambda m: m.model,  ollama.list().get("models", [])):
-    raise ValueError(f"MODEL '{model}' not found in Ollama models.")
-
-# Function to handle AI prompt and streaming response
-async def prompt(message: discord.Message):
-    response = None
-    async with message.channel.typing():
-        response = await ollamaClient.chat(
-            model=model,  # type: ignore - Model guaranteed to be not None here
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": message.content},
-            ]
-        )
-    await message.channel.send(response.message.content)
-
-# Set up Discord client with intents
-intents = discord.Intents.default()
-intents.message_content = True # Enable message content intent - Requires enabling in Discord Developer Portal
-client = discord.Client(intents=intents)
-
-# Event handler for when the bot is ready
-@client.event
-async def on_ready():
-    print(f'Logged in as {client.user}')
-
-# Event handler for incoming messages
-@client.event
-async def on_message(message: discord.Message):
-    if message.author == client.user: 
-        return # Ignore messages from the bot itself
-    print(f'Message from {message.author}: {message.content}')
-    if message.content.startswith('!ai'):
-        await prompt(message)
-        return
+# Function to moderate a message using Ollama.
+async def ollama_mod(ollama_client: ollama.AsyncClient, model: str, history: list[str], message: str):
+    prompt = f"""
+    You are a moderator for a casual online gaming community. 
+    - Be reasonable. Do not be overly strict.
+    - Only flag messages that cleary break community rules.
+    - Take into account recent message history when making your decision.
     
-# Run the client with the token from environment variables
-client.run(token)
+    Recent messages:
+    {"\n".join(history)}
+    
+    New Message:
+    {message}
+    
+    Respond with JSON:
+    action: allow | warn | timeout | flag
+    confidence: 0-1
+    reason: short explanation
+    """
+    
+    messages = [{"role": "user", "content": prompt}]
+    response = await ollama_client.chat(model, messages, format="json")
+    
+    assert(response != None)
+    action = json.loads(response.message.content) # type: ignore
+    
+    return ModAction(
+        action=action["action"],
+        confidence=action["confidence"],
+        reason=action["reason"]
+    )
+    
+# Function to moderate a Discord message.
+async def discord_mod(model: str, message: discord.Message):
+    # Just pulling message history from the API for this version. Caching might be a good idea in future to improve response time.
+    history = []
+    async for history_message in message.channel.history(limit=10):
+        history.append(f"{history_message.author}: {history_message.content}")
+        
+    mod_action = await ollama_mod(ollama_client, model, history, f"{message.author}: {message.content}")
+    
+    print(f"Mod action: {mod_action}")
+
+# Run Discord client to moderate the Discord server.
+def run_discord_client(ollama_client: ollama.AsyncClient):
+    command_prefix = "!"
+    
+    intents = discord.Intents.default()
+    intents.message_content = True # Must also be set in the developer portal
+    
+    token = getenv_required("DISCORD_TOKEN")
+    model = getenv_required("DISCORD_MODEL")
+    
+    # Check that the model is running
+    if model not in map(lambda models: models.model, ollama.list().get("models", [])):
+        raise ValueError(f"{model} not found in Ollama models")
+    
+    bot = commands.Bot(command_prefix, intents=intents)
+    
+    @bot.event
+    async def on_ready():
+        print(f"Discord: Logged in as {bot.user}")
+        
+    @bot.event
+    async def on_message(message: discord.Message):
+        if message.author == bot.user:
+            return # Ignore messages from self
+        await discord_mod(model, message)
+        
+    bot.run(token)
+
+logging.basicConfig()
+load_dotenv()
+ollama_client = ollama.AsyncClient()
+run_discord_client(ollama_client)
