@@ -136,15 +136,15 @@ async def main():
     
     # Initialize Ollama client
     ollama_client = ollama.AsyncClient()
-    model = getenv_required("DISCORD_MODEL")
+    ollama_model = getenv_required("OLLAMA_MODEL")
     
     # Check that the model is running
-    if model not in map(lambda models: models.model, ollama.list().get("models", [])):
-        raise ValueError(f"{model} not found in Ollama models")
+    if ollama_model not in map(lambda models: models.model, ollama.list().get("models", [])):
+        raise ValueError(f"{ollama_model} not found in Ollama models")
     
     # Run Discord and Twitch clients concurrently
-    asyncio.create_task(run_discord_client(ollama_client, model))
-    asyncio.create_task(run_twitch_client(ollama_client, model))
+    asyncio.create_task(run_discord_client(ollama_client, ollama_model))
+    asyncio.create_task(run_twitch_client(ollama_client, ollama_model))
     await asyncio.Future()
     
 asyncio.run(main())

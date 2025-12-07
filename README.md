@@ -1,20 +1,19 @@
 # Foxspark
 
-Foxspark is a Discord LLM integration powered by Ollama. It connects a Discord bot to a local large language model running on your machine.
+Foxspark is a Discord LLM integration powered by Ollama. It connects a Discord bot and a Twitch Application to a local large language model running on your machine to moderate your community.
 
 ## Prerequisites
 
 - [Python 3.10+](https://www.python.org/)
 - [Ollama](https://docs.ollama.com/quickstart): local LLM runtime (see quick setup below)
-- [Discord Application](https://discord.com/developers/applications): Bot for frontend integration
 
 ## Clone the Project
 
 Choose a directory where you want the project stored and run:
 
 ```bash
-git clone <url>
-cd <project>
+git clone git@github.com:ldewhurst/foxspark.git
+cd foxspark
 ```
 
 ## Create and Activate a Virtual Environment
@@ -49,18 +48,26 @@ With the virtual environment active, install the required packages:
 pip install -r requirements.txt
 ```
 
-## Configure .env File
+## Configure Applications
 
-Create a `.env` file in the project root containing:
+You need to configure a [Discord](https://discord.com/developers/applications) and [Twitch](https://dev.twitch.tv/docs/authentication/register-app) application for Foxspark to interface with these platforms.
 
-- `TOKEN`: Your Discord bot token
-- `MODEL`: The Ollama model to use (e.g. `gemma3:latest`)
+Configure Foxspark by creating a `.env` file in the project root containing:
+
+- `OLLAMA_MODEL`: The Ollama model to use.
+- `DISCORD_TOKEN`: **(Secret)** Your Discord bot token
+- `TWITCH_CLIENT_ID`: Your Twitch application's client id.
+- `TWITCH_CLIENT_SECRET`: **(Secret)** Your Twtich application's client secret.
+
+**Do not reveal this file to anyone! Do not commit this file to the repository!** Anyone with secrets can connect to your applications.
 
 ### Template
 
 ```dotenv
-TOKEN=<discord-bot-token>
-MODEL=<model-name>
+OLLAMA_MODEL="gemma3:latest"
+DISCORD_TOKEN="discord-bot-token"
+TWITCH_CLIENT_ID="twitch-client-id"
+TWITCH_CLIENT_SECRET="twitch-secret"
 ```
 
 ## Ollama Setup
