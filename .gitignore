@@ -2,3 +2,5 @@
 **/.venv
 # User environment variables
 **/.env
+# Python cache files
+**/__pycache__/
